@@ -2,13 +2,13 @@ import sharp from 'sharp';
 import { galleries } from '../galleries.js';
 
 export const getTiktokMedia = async (message, ctx) => {
-    const url = `https://tik-tok2.p.rapidapi.com/api/tiktok/links/?url=${message}`;
+    const url = `https://${process.env.RAPIDAPI_HOST_TIKTOK}/api/tiktok/links/?url=${message}`;
 
     const options = {
 	method: 'POST',
 	headers: {
 		'x-rapidapi-key': process.env.RAPIDAPI_KEY,
-		'x-rapidapi-host': process.env.RAPIDAPI_HOST,
+		'x-rapidapi-host': process.env.RAPIDAPI_HOST_TIKTOK,
 		'Content-Type': 'application/json'
 	},
 	body: JSON.stringify({ url: message })
@@ -19,6 +19,11 @@ try {
 
 	const result = await response.json();
 
+    if (result.success === false) {
+        await ctx.reply(`Ошибка: ${result.message}`);
+        return;
+    }
+
     const isPhoto = result[0]?.meta?.sourceUrl?.includes('/photo/');
 
     if (isPhoto) {
@@ -27,15 +32,15 @@ try {
         let photos = [];
 
         for (const item of result) {
-            const imageResponse = await fetch(`https://tik-tok2.p.rapidapi.com${item.pictureUrl}`, {
+            const imageResponse = await fetch(`https://${process.env.RAPIDAPI_HOST_TIKTOK}${item.pictureUrl}`, {
                 headers: {
                     'x-rapidapi-key': process.env.RAPIDAPI_KEY,
-                    'x-rapidapi-host': process.env.RAPIDAPI_HOST,
+                    'x-rapidapi-host': process.env.RAPIDAPI_HOST_TIKTOK,
                 },
             });
 
 
-            if (imageResponse.headers.get('content-type') !== 'image/webp') continue;
+            if (!imageResponse.headers.get('content-type')?.startsWith('image/')) continue;
            
             const buffer = Buffer.from(await imageResponse.arrayBuffer());
 
@@ -63,8 +68,9 @@ try {
         
     } else {
         await ctx.sendChatAction('upload_video');
-    const videoUrl  = result[0].urls.find(item => item.subName === '720')?.url;
-   
+
+        const videoUrl  = result[0].urls.find(item => item.extension === 'mp4')?.url;
+
     const videoResponse = await fetch(videoUrl);
     const buffer = Buffer.from(await videoResponse.arrayBuffer());
 
@@ -76,8 +82,10 @@ try {
 	
 
 } catch (error) {
-	ctx.reply('Ошибка, сейчас разраб ахуеет ее чинить');
-    console.error(error);
+    if (error.code === 413) {
+        ctx.reply(`Видео слишком большое, пока с такими размерами не работаем`);
+        console.error(error);
+    }
 }
 }
 
